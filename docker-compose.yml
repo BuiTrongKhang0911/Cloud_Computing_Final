@@ -1,0 +1,230 @@
+services:
+  web-frontend-server:
+    container_name: minicloud-web
+    build:
+      context: ./web-frontend-server
+    image: wasabi4816/myminicloud-web:latest
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    networks:
+      cloud-net:
+        ipv4_address: 172.28.0.11
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  application-backend-server:
+    container_name: minicloud-app
+    build:
+      context: ./application-backend-server
+    ports:
+      - "8085:8081"
+    environment:
+      KEYCLOAK_URL: http://authentication-identity-server:8080
+      KEYCLOAK_REALM: minicloud
+      KEYCLOAK_CLIENT_ID: minicloud-app
+      KEYCLOAK_ISSUER: http://localhost:8081/realms/minicloud
+    depends_on:
+      authentication-identity-server:
+        condition: service_healthy
+      relational-database-server:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      cloud-net:
+        ipv4_address: 172.28.0.12
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  relational-database-server:
+    container_name: minicloud-db
+    image: mariadb:11.4
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${MARIADB_DATABASE}
+      MARIADB_USER: ${MARIADB_USER}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./relational-database-server/init:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+    networks:
+      cloud-net:
+        ipv4_address: 172.28.0.14
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  authentication-identity-server:
+    container_name: minicloud-keycloak
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8081:8080"
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+      - ./authentication-identity-server/realm:/opt/keycloak/data/import:ro
+    restart: unless-stopped
+    networks:
+      cloud-net:
+        ipv4_address: 172.28.0.13
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && grep -q '200' <&3"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  object-storage-server:
+    container_name: minicloud-minio
+    image: coollabsio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+    networks:
+      cloud-net:
+        ipv4_address: 172.28.0.15
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  internal-dns-server:
+    container_name: minicloud-dns
+    image: internetsystemsconsortium/bind9:9.20
+    ports:
+      - "1053:53/tcp"
+      - "1053:53/udp"
+    volumes:
+      - ./internal-dns-server/named.conf:/etc/bind/named.conf:ro
+      - ./internal-dns-server/db.cloud.local:/etc/bind/db.cloud.local:ro
+      - bind-cache:/var/cache/bind
+    restart: unless-stopped
+    networks:
+      cloud-net:
+        ipv4_address: 172.28.0.10
+    healthcheck:
+      test: ["CMD-SHELL", "named-checkzone cloud.local /etc/bind/db.cloud.local"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  monitoring-prometheus-server:
+    container_name: minicloud-prometheus
+    image: prom/prometheus:v3.0.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring-prometheus-server/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+    networks:
+      cloud-net:
+        ipv4_address: 172.28.0.17
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  node-exporter:
+    container_name: minicloud-node-exporter
+    image: prom/node-exporter:v1.8.2
+    command:
+      - "--path.rootfs=/host"
+    ports:
+      - "9100:9100"
+    volumes:
+      - /:/host:ro
+    restart: unless-stopped
+    networks:
+      cloud-net:
+        ipv4_address: 172.28.0.16
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9100/metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  monitoring-grafana-dashboard-server:
+    container_name: minicloud-grafana
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring-grafana-dashboard-server/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring-grafana-dashboard-server/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      monitoring-prometheus-server:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      cloud-net:
+        ipv4_address: 172.28.0.18
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api-gateway-proxy-server:
+    container_name: minicloud-proxy
+    build:
+      context: ./api-gateway-proxy-server
+    ports:
+      - "80:80"
+    depends_on:
+      web-frontend-server:
+        condition: service_healthy
+      application-backend-server:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      cloud-net:
+        ipv4_address: 172.28.0.19
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+networks:
+  cloud-net:
+    name: cloud-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+volumes:
+  mariadb-data:
+  keycloak-data:
+  minio-data:
+  bind-cache:
+  prometheus-data:
+  grafana-data:

@@ -1,0 +1,28 @@
+{
+  "realm": "minicloud",
+  "enabled": true,
+  "clients": [
+    {
+      "clientId": "minicloud-app",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "redirectUris": ["*"],
+      "webOrigins": ["*"]
+    }
+  ],
+  "users": [
+    {
+      "username": "student",
+      "enabled": true,
+      "email": "student@cloud.local",
+      "firstName": "MiniCloud",
+      "lastName": "Student",
+      "credentials": [
+        {"type": "password", "value": "student123", "temporary": false}
+      ]
+    }
+  ]
+}
