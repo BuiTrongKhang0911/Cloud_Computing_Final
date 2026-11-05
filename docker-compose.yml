@@ -16,6 +16,24 @@ services:
       timeout: 5s
       retries: 5
 
+  web-frontend-server-2:
+    container_name: minicloud-web-2
+    image: wasabi4816/myminicloud-web-2:latest
+    build:
+      context: ./web-frontend-server
+    volumes:
+      - ./web-frontend-server/nginx-server-2.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./web-frontend-server/index-server-2.html:/usr/share/nginx/html/index.html:ro
+    restart: unless-stopped
+    networks:
+      cloud-net:
+        ipv4_address: 172.28.0.20
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   application-backend-server:
     container_name: minicloud-app
     build:
@@ -26,7 +44,15 @@ services:
       KEYCLOAK_URL: http://authentication-identity-server:8080
       KEYCLOAK_REALM: minicloud
       KEYCLOAK_CLIENT_ID: minicloud-app
-      KEYCLOAK_ISSUER: http://localhost:8081/realms/minicloud
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-http://localhost:8081/realms/minicloud}
+      KEYCLOAK_EXTRA_REALM: realm_sv001
+      KEYCLOAK_EXTRA_CLIENT_ID: flask-app
+      KEYCLOAK_EXTRA_ISSUER: ${KEYCLOAK_EXTRA_ISSUER:-http://localhost:8081/realms/realm_sv001}
+      DATABASE_HOST: relational-database-server
+      DATABASE_PORT: 3306
+      DATABASE_NAME: ${MARIADB_DATABASE}
+      DATABASE_USER: ${MARIADB_USER}
+      DATABASE_PASSWORD: ${MARIADB_PASSWORD}
     depends_on:
       authentication-identity-server:
         condition: service_healthy
@@ -51,7 +77,7 @@ services:
       MARIADB_USER: ${MARIADB_USER}
       MARIADB_PASSWORD: ${MARIADB_PASSWORD}
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3307:3306"
     volumes:
       - mariadb-data:/var/lib/mysql
       - ./relational-database-server/init:/docker-entrypoint-initdb.d:ro
@@ -73,6 +99,7 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_HEALTH_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
     ports:
       - "8081:8080"
     volumes:
@@ -148,7 +175,7 @@ services:
       timeout: 5s
       retries: 10
 
-  node-exporter:
+  monitoring-node-exporter-server:
     container_name: minicloud-node-exporter
     image: prom/node-exporter:v1.8.2
     command:
@@ -200,6 +227,8 @@ services:
       - "80:80"
     depends_on:
       web-frontend-server:
+        condition: service_healthy
+      web-frontend-server-2:
         condition: service_healthy
       application-backend-server:
         condition: service_healthy

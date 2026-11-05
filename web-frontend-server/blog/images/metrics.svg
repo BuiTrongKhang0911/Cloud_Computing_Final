@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 240" role="img" aria-labelledby="title">
+  <title id="title">Metrics dashboard</title>
+  <rect width="480" height="240" rx="18" fill="#f3efff"/>
+  <rect x="58" y="38" width="364" height="164" rx="12" fill="#fff" stroke="#7866bd" stroke-width="4"/>
+  <path d="M92 162l54-44 45 20 54-62 48 35 75-46" fill="none" stroke="#6b57bd" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <g fill="#6b57bd"><circle cx="146" cy="118" r="7"/><circle cx="191" cy="138" r="7"/><circle cx="245" cy="76" r="7"/><circle cx="293" cy="111" r="7"/><circle cx="368" cy="65" r="7"/></g>
+  <text x="240" y="228" fill="#51418e" font-family="sans-serif" font-size="17" text-anchor="middle">collect · query · visualize</text>
+</svg>

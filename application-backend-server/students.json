@@ -1,0 +1,7 @@
+[
+  {"id": 1, "name": "Nguyen Minh Anh", "major": "Cloud Computing", "gpa": 3.72},
+  {"id": 2, "name": "Tran Gia Bao", "major": "Computer Science", "gpa": 3.45},
+  {"id": 3, "name": "Le Phuong Linh", "major": "Information Systems", "gpa": 3.88},
+  {"id": 4, "name": "Pham Quoc Huy", "major": "Cybersecurity", "gpa": 3.31},
+  {"id": 5, "name": "Vo Thu Ha", "major": "Software Engineering", "gpa": 3.64}
+]

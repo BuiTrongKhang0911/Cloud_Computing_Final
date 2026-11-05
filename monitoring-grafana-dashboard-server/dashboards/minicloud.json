@@ -4,15 +4,44 @@
   "panels": [
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
       "id": 1,
+      "targets": [{"expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "CPU Usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "targets": [{"expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)", "legendFormat": "{{instance}}", "refId": "A"}],
+      "title": "Memory Used",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "bps"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+      "id": 3,
+      "targets": [{"expr": "sum by (instance) (rate(node_network_receive_bytes_total{device!=\"lo\"}[5m])) * 8", "legendFormat": "{{instance}} receive", "refId": "A"}],
+      "title": "Network Receive Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 16},
+      "id": 4,
       "targets": [{"expr": "up", "legendFormat": "{{job}} - {{instance}}", "refId": "A"}],
-      "title": "MiniCloud Targets",
+      "title": "Service Scrape Status",
       "type": "timeseries"
     }
   ],
   "schemaVersion": 39,
+  "tags": ["minicloud", "monitoring"],
+  "time": {"from": "now-1h", "to": "now"},
   "title": "MiniCloud Overview",
   "uid": "minicloud-overview",
-  "version": 1
+  "version": 2
 }

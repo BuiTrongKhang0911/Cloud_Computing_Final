@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 240" role="img" aria-labelledby="title">
+  <title id="title">Containerized application</title>
+  <rect width="480" height="240" rx="18" fill="#eefaf5"/>
+  <rect x="90" y="54" width="300" height="132" rx="18" fill="#1f8a70"/>
+  <g fill="#fff" stroke="#135c4b" stroke-width="4"><rect x="116" y="82" width="72" height="72" rx="8"/><rect x="204" y="82" width="72" height="72" rx="8"/><rect x="292" y="82" width="72" height="72" rx="8"/></g>
+  <g fill="#135c4b" font-family="sans-serif" font-size="14" text-anchor="middle"><text x="152" y="124">App</text><text x="240" y="124">Runtime</text><text x="328" y="124">Config</text></g>
+  <text x="240" y="218" fill="#135c4b" font-family="sans-serif" font-size="18" text-anchor="middle">one repeatable container image</text>
+</svg>
