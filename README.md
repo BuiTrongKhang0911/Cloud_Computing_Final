@@ -1,353 +1,332 @@
-# MiniCloud — Docker Compose Cloud Lab
+# MiniCloud
 
-Dự án mô phỏng các vai trò hạ tầng cloud bằng Docker Compose: web frontend, API, cơ sở dữ liệu, xác thực, object storage, DNS, giám sát và API gateway. Hướng dẫn này giúp thành viên nhóm clone, chạy thử và kiểm tra các dịch vụ trên máy cá nhân trước khi triển khai lên AWS EC2.
+MiniCloud là dự án mô phỏng hạ tầng cloud bằng Docker Compose, gồm frontend HTML, backend Flask API và các dịch vụ cơ sở dữ liệu, xác thực, lưu trữ, DNS, giám sát. Dự án có thể chạy toàn bộ trên một EC2 Ubuntu.
 
-## Yêu cầu
-
-- Git
-- Docker Desktop đang chạy, có Docker Compose v2
-- PowerShell trên Windows (hoặc shell tương đương trên Linux/macOS)
-- Khuyến nghị RAM từ 8 GB để chạy đồng thời các container
-
-## Bắt đầu nhanh trên Windows
-
-Clone repository và vào thư mục dự án:
-
-```powershell
-git clone https://github.com/BuiTrongKhang0911/Cloud_Computing_Final.git
-cd Cloud_Computing_Final
-```
-
-Tạo file cấu hình cục bộ từ mẫu. Không commit file `.env`:
-
-```powershell
-Copy-Item .env.example .env
-notepad .env
-```
-
-Thay các mật khẩu mẫu trong `.env` bằng giá trị riêng trên máy bạn. Giữ nguyên tên biến; Docker Compose dùng các biến này cho MariaDB, Keycloak, MinIO và Grafana.
-
-Build và khởi động toàn bộ stack trên máy phát triển:
-
-```powershell
-docker compose -f docker-compose.yml -f docker-compose.build.yml build
-docker compose up -d --no-build
-docker compose ps
-```
-
-Chờ các dịch vụ có healthcheck chuyển sang `healthy`. Dịch vụ không khai báo healthcheck có thể chỉ hiện `Up`.
-
-### Khởi tạo studentdb
-
-Image MariaDB tự chạy các file trong `db/init/` theo thứ tự tên
-khi khởi tạo **volume dữ liệu mới**:
-
-1. `001_init.sql`: tạo database `minicloud`, bảng `services` và dữ liệu mẫu.
-2. `002_studentdb.sql`: tạo `studentdb`, bảng `students`, thêm 3 sinh viên và cấp quyền cho `minicloud_user`.
-
-Compose đã mount thư mục này vào `/docker-entrypoint-initdb.d`; không cần script
-PowerShell để seed DB khi deploy lần đầu. Giữ `MARIADB_USER=minicloud_user` trong
-`.env` vì file SQL đang cấp quyền cho username này.
-
-Restart/rebuild container với volume cũ sẽ giữ dữ liệu và **không chạy lại SQL
-init**. Khi thay đổi schema hoặc dữ liệu trên DB cũ, áp dụng SQL có chủ đích qua
-DB client; không xóa volume đang dùng để ép chạy lại seed.
-
-Nguồn: [MariaDB official image — initializing database contents](https://hub.docker.com/_/mariadb).
-
-## Các địa chỉ dịch vụ
-
-| Thành phần | URL/địa chỉ từ máy host | Ghi chú |
-| --- | --- | --- |
-| Web frontend | <http://localhost:8080/> | Trang chủ |
-| Blog | <http://localhost:8080/blog/> | Ba bài viết tĩnh |
-| API Gateway | <http://localhost/> | Web qua upstream cân bằng tải |
-| Backend API | <http://localhost:8085/> | Cổng backend trực tiếp |
-| Keycloak | <http://localhost:8081/> | Admin credentials nằm trong `.env` cục bộ |
-| MinIO Console | <http://localhost:9001/> | MinIO API ở cổng 9000 |
-| Prometheus | <http://localhost:9090/> | Target health tại `/targets` |
-| Grafana | <http://localhost:3000/> | Admin credentials nằm trong `.env` cục bộ |
-| MariaDB | `127.0.0.1:3307` | Cổng container là 3306; bind trên loopback |
-| DNS | `127.0.0.1:1053` TCP/UDP | DNS nội bộ lắng nghe cổng 53 trong container |
-
-Các container trao đổi với nhau qua mạng Docker `cloud-net`; ứng dụng dùng tên service và cổng nội bộ, ví dụ `relational-database-server:3306`.
-
-## Kiểm tra nhanh
-
-Chạy sau khi stack đã khởi động:
-
-```powershell
-curl.exe http://localhost:8080/
-curl.exe http://localhost:8080/blog/
-curl.exe http://localhost:8085/hello
-curl.exe http://localhost/api/student
-curl.exe http://localhost/api/students-db
-curl.exe http://localhost/student/
-```
-
-`/api/student` và `/student/` trả về danh sách 5 sinh viên mẫu. `/api/students-db` truy vấn ba hàng mẫu trong database `studentdb`.
-
-Kiểm tra DNS mở rộng từ container Bind9:
-
-```powershell
-docker exec minicloud-dns nslookup app-backend.cloud.local 127.0.0.1
-docker exec minicloud-dns nslookup minio.cloud.local 127.0.0.1
-docker exec minicloud-dns nslookup keycloak.cloud.local 127.0.0.1
-```
-
-Kiểm tra Prometheus tại <http://localhost:9090/targets>; target `web` cần ở trạng thái `UP`. Trong Grafana tại <http://localhost:3000/>, mở dashboard **System Health of SV001** để xem CPU, memory và network.
-
-### Xác thực Keycloak
-
-Realm mẫu `realm_sv001` được import từ `auth/realm/` cùng client `flask-app` và hai user thử nghiệm `sv01`, `sv02`. Mật khẩu demo được khai báo trong file realm import; chỉ dùng cho lab cục bộ và cần thay trước khi công khai repository hoặc triển khai thật.
-
-Có thể gọi `/secure` bằng access token. Đoạn PowerShell dưới đây giữ token trong biến; không in hoặc chụp giá trị token:
-
-```powershell
-$tokenResponse = Invoke-RestMethod -Method Post `
-  -Uri 'http://localhost:8081/realms/realm_sv001/protocol/openid-connect/token' `
-  -ContentType 'application/x-www-form-urlencoded' `
-  -Body @{ grant_type='password'; client_id='flask-app'; username='sv01'; password='<demo-password-from-realm-import>' }
-
-Invoke-RestMethod -Uri 'http://localhost:8085/secure' `
-  -Headers @{ Authorization="Bearer $($tokenResponse.access_token)" }
-```
-
-Thay `<demo-password-from-realm-import>` bằng mật khẩu lab đã cấu hình trong realm import. Kết quả mong đợi có `authenticated: true`.
-
-### Kiểm tra MinIO
-
-MinIO đảm nhiệm Object Storage Server, mô phỏng lưu trữ bucket/object như S3.
-Service `object-storage-server` dùng image có sẵn trong Compose, dữ liệu lưu vào
-Docker named volume `minio-data` tại `/data`. Không cần thư mục source hoặc
-Dockerfile MinIO riêng. Frontend/backend hiện chưa tích hợp chức năng upload;
-bạn demo lưu trữ trực tiếp qua MinIO Console hoặc S3 API.
-
-Đăng nhập Console tại <http://localhost:9001/> bằng `MINIO_ROOT_USER` và
-`MINIO_ROOT_PASSWORD` trong `.env`. Demo cơ bản: tạo bucket `demo`, upload
-`web/html/index.html` và thử download. Phần mở rộng: tạo bucket `profile-pics`,
-upload `avatar.jpg`, kiểm tra URL public object; tạo bucket `documents` và upload
-PDF báo cáo. Dùng file demo không nhạy cảm và đưa bucket về private sau demo.
-
-### Kiểm tra cân bằng tải web
-
-Gateway gửi request `/` luân phiên qua hai frontend instance. Chạy:
-
-```powershell
-1..6 | ForEach-Object {
-  curl.exe -s -i http://localhost/ | Select-String 'X-Backend-Instance|Serving instance'
-}
-```
-
-Kết quả cần thể hiện cả `web-frontend-server` và `web-frontend-server-2`.
-
-## Cấu trúc dự án
-
-```text
-Cloud_Computing_Final/
-├── app/
-│   ├── Dockerfile
-│   ├── app.py
-│   ├── requirements.txt
-│   └── students.json
-├── auth/realm/         # Realm, client, user Keycloak
-├── db/init/
-│   ├── 001_init.sql
-│   └── 002_studentdb.sql
-├── dns/
-│   ├── db.cloud.local
-│   ├── named.conf      # Nạp hai file options/local bên dưới
-│   ├── named.conf.local
-│   └── named.conf.options
-├── grafana/
-│   ├── dashboards/
-│   └── provisioning/
-├── monitor/
-│   └── prometheus.yml
-├── proxy/
-│   └── nginx.conf
-├── web/
-│   ├── Dockerfile
-│   ├── conf.default
-│   ├── conf.server-2
-│   └── html/
-│       ├── blog/       # Index blog, 3 bài viết, ảnh và CSS
-│       ├── index.html
-│       └── index-server-2.html
-├── setup-ec2.sh        # Cài Docker/Compose và khởi động trên Ubuntu EC2
-├── docker-compose.yml
-├── docker-compose.build.yml # Chỉ dùng khi build image trên máy phát triển
-├── .gitattributes      # Giữ LF cho shell script khi clone trên Windows
-└── .env.example
-```
-
-Compose và `.env` nằm ở gốc để khởi động chung cả 11 container. Tên service,
-container, cổng và named volume được giữ nguyên sau khi tổ chức lại thư mục;
-tên thư mục mới không thay đổi hostname dùng giữa các container.
+## Thành phần dự án
 
 | Thư mục | Vai trò |
 | --- | --- |
-| `web/` | Nginx frontend, blog và instance thứ hai |
-| `app/` | Flask API và JWT validation |
-| `db/` | MariaDB schema và dữ liệu khởi tạo |
-| `auth/` | Keycloak và realm import |
-| `proxy/` | Nginx reverse proxy và load balancing |
-| `dns/` | Bind9 zone nội bộ |
-| `monitor/` | Prometheus scrape targets; Node Exporter dùng image có sẵn trong Compose |
-| `grafana/` | Datasource và dashboard provisioning |
+| `web/` | Frontend HTML/CSS, blog và cấu hình hai web server |
+| `app/` | Backend Flask, API sinh viên, kết nối MariaDB và xác thực token |
+| `proxy/` | Nginx gateway, định tuyến API và cân bằng tải giữa hai web server |
+| `db/init/` | SQL tạo database và dữ liệu ban đầu |
+| `auth/realm/` | Realm, client và user mẫu của Keycloak |
+| `dns/` | Bind9 và các bản ghi nội bộ `cloud.local` |
+| `monitor/` | Cấu hình Prometheus; Node Exporter cung cấp số liệu hệ thống |
+| `grafana/` | Datasource và dashboard Grafana |
 
-Cấu trúc dùng tên thư mục theo ví dụ trong đề. Các file mở rộng cho blog,
-web thứ hai, Keycloak và Grafana nằm trong thư mục vai trò tương ứng. MinIO và
-Node Exporter dùng image có sẵn trong Compose nên không cần thư mục source riêng;
-hệ thống vẫn có đủ 9 loại server.
+MinIO chạy bằng image có sẵn và lưu file trong Docker volume. Các dịch vụ giao tiếp qua mạng `cloud-net`. Hai web server dùng chung image frontend; backend dùng một image riêng. `docker-compose.yml` dùng để pull/chạy dịch vụ, `docker-compose.build.yml` bổ sung cấu hình build frontend và backend. `setup-ec2.sh` tự động cấu hình và khởi động trên Ubuntu EC2.
 
-`.gitattributes` có dòng `*.sh text eol=lf` để Git giữ xuống dòng Linux cho
-`setup-ec2.sh`, kể cả khi clone trên Windows có bật `core.autocrlf`. File này
-giúp tránh lỗi Bash do CRLF khi đưa script lên EC2 nên được giữ lại.
+## 1. Chuẩn bị EC2 và Security Group
 
-## Kiểm tra sau khi khởi động
+Tạo một EC2 Ubuntu có public IPv4, chọn key pair và tải file `.pem` về máy. Tất cả dịch vụ chạy bằng Docker Compose trên cùng EC2.
 
-```powershell
-docker compose config --quiet
-docker compose ps
-curl.exe http://localhost/api/student
-curl.exe http://localhost/api/students-db
-```
+Trong **EC2 → Instances → chọn instance → Security → Security group → Edit inbound rules**, thêm các cổng sau. Các cổng truy cập từ máy bên ngoài được cấu hình như sau:
 
-Trên Ubuntu, dùng `curl` thay cho `curl.exe` và thêm `sudo` trước lệnh `docker`
-nếu tài khoản hiện tại chưa có quyền truy cập Docker. Xem các phần kiểm tra nhanh,
-Keycloak, MinIO, DNS và cân bằng tải ở trên để demo từng dịch vụ.
+| Type | Port range | Protocol | Source | Dịch vụ |
+| --- | --- | --- | --- | --- |
+| Custom TCP | 9001 | TCP | 0.0.0.0/0 | MinIO Console |
+| Custom TCP | 3000 | TCP | 0.0.0.0/0 | Grafana |
+| Custom TCP | 9090 | TCP | 0.0.0.0/0 | Prometheus |
+| Custom TCP | 8081 | TCP | 0.0.0.0/0 | Keycloak |
+| SSH | 22 | TCP | 0.0.0.0/0 | SSH |
+| HTTP | 80 | TCP | 0.0.0.0/0 | Gateway, frontend và API |
+| Custom TCP | 9000 | TCP | 0.0.0.0/0 | MinIO API và file public |
 
-Ảnh demo có thể lưu trong `evidence/` khi thu thập minh chứng. Không đưa mật khẩu,
-access token hoặc private key vào ảnh/log công khai.
+Bấm **Save rules**. Rule ID và tên Security Group do AWS cấp cho từng môi trường, không cần giống máy mẫu. `0.0.0.0/0` cho phép mọi IP truy cập; nên giới hạn SSH và các cổng quản trị bằng **My IP** khi dùng thực tế.
 
-## Dừng và dọn môi trường
+Để sử dụng các URL bên dưới, không cần mở thêm cổng 8080, 8085, 3307, 1053 hoặc 9100. Truy cập HTTP không ghi cổng sẽ dùng cổng 80.
 
-Dừng container nhưng giữ dữ liệu trong named volumes:
+## 2. SSH vào EC2 và chạy setup
+
+Trên máy Windows, mở PowerShell tại thư mục chứa key:
 
 ```powershell
-docker compose down
+ssh -i ".\Cloud-Final.pem" ubuntu@PUBLIC_IP_EC2
 ```
 
-Xóa cả volumes sẽ xóa dữ liệu MariaDB, MinIO, Keycloak, Prometheus và Grafana; chỉ chạy lệnh sau nếu muốn reset lab:
+Thay `PUBLIC_IP_EC2` bằng public IPv4 trong AWS Console. Lần đầu kết nối, nhập `yes` nếu đã xác nhận đúng instance.
 
-```powershell
-docker compose down -v
-```
-
-## Xử lý lỗi thường gặp
-
-- **Không bind được cổng 3306:** database được publish ra `127.0.0.1:3307`. Host dùng cổng 3307; các container vẫn kết nối cổng nội bộ 3306.
-- **API báo `student_database_unavailable`:** xem `docker compose logs relational-database-server application-backend-server`; xác nhận `studentdb` đã được tạo và user có quyền. Volume DB cũ không tự chạy lại SQL init mới thêm vào.
-- **Container chưa healthy ngay sau khi start:** chờ thêm rồi xem `docker compose ps` hoặc `docker compose logs <service-name>`.
-- **DNS không phân giải được:** kiểm tra `minicloud-dns` đang chạy và truy vấn qua `docker exec minicloud-dns nslookup <name> 127.0.0.1`.
-
-## An toàn khi cộng tác
-
-- Không commit `.env`; mỗi thành viên tạo file riêng từ `.env.example`.
-- Không chia sẻ mật khẩu, access token hay khóa riêng qua GitHub/chat.
-- File realm có credential demo để phục vụ lab. Giữ repository private cho nhóm; trước khi chuyển sang public, thay hoặc loại bỏ credential demo và rà soát ảnh trong `evidence/`.
-- Sau khi thay mật khẩu realm, cập nhật cấu hình local tương ứng để bài kiểm tra xác thực tiếp tục hoạt động.
-
-## Triển khai AWS
-
-Trước khi deploy, build và push 2 custom image lên Docker Hub theo phần hướng dẫn
-bên dưới. Sau khi có EC2 Ubuntu, clone hoặc copy **toàn bộ repo** lên máy để lấy
-Compose, SQL init, realm Keycloak, config DNS/monitoring, config Nginx gateway
-và file mount cho web 2. Backend/frontend nằm trong hai custom image; gateway
-dùng image Nginx có sẵn và mount cấu hình. EC2 không build source.
-
-Chạy từ bản repo trên EC2. Script tự lấy public IPv4 qua EC2 Instance Metadata
-Service bằng IMDSv2, không cần nhập IP:
+Sau khi vào Ubuntu, clone dự án và chạy:
 
 ```bash
+git clone https://github.com/BuiTrongKhang0911/Cloud_Computing_Final.git
+cd Cloud_Computing_Final
 sudo bash setup-ec2.sh
 ```
 
-Nếu muốn dùng domain hoặc chỉ định địa chỉ, vẫn có thể truyền host:
+Script tự lấy public IP qua EC2 metadata, cài Docker/Compose nếu chưa có, tạo `.env` từ `.env.example` và hỏi 5 mật khẩu: MariaDB root, MariaDB application user, Keycloak admin, MinIO admin và Grafana admin. Mật khẩu nhập ẩn, tối thiểu 8 ký tự và cần xác nhận lại.
+
+Script pull image từ Docker Hub và khởi động các dịch vụ; EC2 không build image. Hai image `khangtrong/cloud-final-frontend:latest` và `khangtrong/cloud-final-backend:latest` phải được publish trước. Script cũng tự cho phép HTTP cho các realm Keycloak `master`, `minicloud`, `realm_sv001`.
+
+Nếu đã clone và muốn cập nhật bản mới:
 
 ```bash
-sudo bash setup-ec2.sh ec2-example.compute.amazonaws.com
+cd ~/Cloud_Computing_Final
+git pull
+sudo bash setup-ec2.sh
 ```
 
-File setup thực hiện:
+Chạy lại giữ dữ liệu trong volume và mật khẩu đã cấu hình. MariaDB chỉ tự nhập SQL khởi tạo khi volume dữ liệu còn mới. Script không tự tạo bucket hay cấp quyền public MinIO.
 
-1. Kiểm tra Ubuntu và các file dự án cần thiết.
-2. Cài Docker Engine/Compose nếu chưa có, từ [APT repository chính thức của Docker](https://docs.docker.com/engine/install/ubuntu/).
-3. Tự lấy public IPv4 qua IMDSv2, hoặc dùng host được truyền vào. Nếu không lấy được địa chỉ, dừng và thông báo; không dùng nhầm private IP.
-4. Đọc `.env.example` và hỏi 5 mật khẩu nếu chưa có `.env`: MariaDB root, MariaDB application user, Keycloak admin, MinIO admin và Grafana admin. Mật khẩu được nhập ẩn, tối thiểu 8 ký tự và nhập lại để xác nhận. Script lưu vào `.env` với quyền `600`, cập nhật hai issuer Keycloak theo public IP. Username và tên DB lấy từ file mẫu.
-5. Pull toàn bộ image rồi chạy Compose với `--no-build --pull never`, chờ healthcheck; MariaDB tự seed nếu volume mới. Nếu pull thất bại, kiểm tra hai image frontend/backend có tag `latest` và quyền truy cập; script không tự build thay thế.
-6. Kiểm tra có ít nhất 3 sinh viên trong DB và gọi API đọc DB qua proxy.
+Kiểm tra phiên bản Docker và trạng thái các dịch vụ:
 
-Nếu `.env` đã có đủ mật khẩu hợp lệ, chạy lại không hỏi lại hoặc đổi mật khẩu.
-Nếu còn thiếu hoặc còn giá trị mẫu, script chỉ hỏi những mật khẩu đó. Thao tác
-nhập mật khẩu cần terminal SSH tương tác; không chạy lần đầu bằng cách pipe file
-vào Bash. Khi chạy bằng EC2 user data không có terminal, cần chuẩn bị `.env` sẵn.
-File `.env` được `.gitignore` bỏ qua nên `git clone` bình thường chỉ có `.env.example`.
+```bash
+docker --version
+sudo docker compose version
+sudo docker compose ps
+```
 
-Chạy lại setup giữ nguyên các volume và credential; nó không tự áp dụng lại SQL
-seed trên DB cũ. Nếu public IP đổi, chạy lại để tự lấy IP mới và cập nhật issuer.
-Tự nhận IP yêu cầu instance có public IPv4 và truy cập được IMDS. Nếu metadata
-bị tắt hoặc bạn sử dụng domain riêng, truyền host như ví dụ trên.
-Nếu dùng shell SSH trên EC2 để tự lấy token, vẫn truy cập Keycloak bằng public
-host đã cấu hình để claim `iss` khớp cấu hình backend.
+Nếu tự nhận public IP thất bại, có thể truyền IP vào:
 
-Nguồn: [AWS — truy cập metadata bằng IMDSv2](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html).
+```bash
+sudo bash setup-ec2.sh PUBLIC_IP_EC2
+```
 
-File này cấu hình phần mềm **bên trong EC2**, không tạo EC2, Security Group hoặc
-push Docker Hub. Cần tự chuẩn bị Security Group cho cổng 80 và các cổng demo
-8081, 9000/9001, 9090, 3000 khi cần; giới hạn cổng quản trị theo IP nhóm.
-Không cần mở DB hoặc Node Exporter công khai. Hoàn tất Docker Hub và minh chứng
-AWS theo yêu cầu bài.
+## 3. Truy cập ứng dụng và dịch vụ
 
-### Build/push ở máy cá nhân, pull/run trên EC2
+Thay `PUBLIC_IP_EC2` trong các URL dưới đây bằng IP thật. Các URL này truy cập từ trình duyệt hoặc Postman trên máy bạn.
 
-`docker-compose.yml` khai báo `image:` cho cả 11 service. Chỉ có **2 custom image**
-cần build và push; cấu hình build nằm trong `docker-compose.build.yml`:
-
-| Image | Container sử dụng | Dockerfile |
+| Thành phần | URL | Nội dung kiểm tra |
 | --- | --- | --- |
-| `khangtrong/cloud-final-frontend:latest` | `minicloud-web` và `minicloud-web-2` | `web/Dockerfile` |
-| `khangtrong/cloud-final-backend:latest` | `minicloud-app` | `app/Dockerfile` |
+| Frontend qua gateway | `http://PUBLIC_IP_EC2/` | Trang chủ |
+| Blog | `http://PUBLIC_IP_EC2/blog/` | Danh sách bài và ba bài blog có ảnh, liên kết |
+| Backend hello qua gateway | `http://PUBLIC_IP_EC2/api/hello` | JSON lời chào |
+| API sinh viên từ JSON | `http://PUBLIC_IP_EC2/api/student` | 5 sinh viên |
+| API sinh viên từ MariaDB | `http://PUBLIC_IP_EC2/api/students-db` | Ít nhất 3 sinh viên |
+| Route student qua gateway | `http://PUBLIC_IP_EC2/student/` | Danh sách sinh viên |
+| API cần token | `http://PUBLIC_IP_EC2/api/secure` | 401 khi không có token; 200 khi token hợp lệ |
+| Keycloak | `http://PUBLIC_IP_EC2:8081/admin/` | Quản trị realm, user và client |
+| Prometheus targets | `http://PUBLIC_IP_EC2:9090/targets` | Các target UP |
+| Prometheus query | `http://PUBLIC_IP_EC2:9090/query` | Truy vấn `node_cpu_seconds_total` |
+| Grafana | `http://PUBLIC_IP_EC2:3000/` | Dashboard và datasource |
+| MinIO Console | `http://PUBLIC_IP_EC2:9001/` | Tạo bucket, upload/download |
+| MinIO object | `http://PUBLIC_IP_EC2:9000/TEN_BUCKET/TEN_FILE` | Đọc file nếu đã cấp quyền public |
 
-Hai web container dùng chung một frontend image. Web 2 mount riêng trang chủ và
-config Nginx để nhận biết instance khi demo cân bằng tải. Chỉ build frontend
-qua service `web-frontend-server`, không build hoặc push riêng web 2.
+Tài khoản mặc định trong file mẫu: Keycloak `admin`, Grafana `admin`, MinIO `minioadmin`. Dùng mật khẩu tương ứng đã nhập khi chạy setup.
 
-Gateway dùng image có sẵn `nginx:1.27-alpine`, mount
-`proxy/nginx.conf` vào `/etc/nginx/conf.d/default.conf`. Không cần
-Dockerfile hoặc custom image gateway. Cùng MariaDB, Keycloak, MinIO, Bind9,
-Prometheus, Node Exporter và Grafana, có **8 service dùng image có sẵn**.
-Tổng số container vẫn là 11, gồm 2 web + backend + 8 service hạ tầng.
-
-Theo đề cần push ít nhất 1 custom image; với cách deploy này, publish đủ cả
-`khangtrong/cloud-final-frontend:latest` và `khangtrong/cloud-final-backend:latest` trước khi chạy EC2.
-
-Namespace là Docker ID `khangtrong`. Tên repository là `cloud-final-frontend`
-và `cloud-final-backend`; `cloud-final` dùng làm tiền tố tên dự án trong repository.
-Giữ tag `latest` cho cả hai image, không cần biến namespace/tag trong `.env`.
-Đăng nhập đúng tài khoản `khangtrong` trước khi push. Đặt tên image trong Compose
-không tạo tài khoản hoặc organization mới trên Docker Hub.
-
-Trên máy cá nhân:
-
-```powershell
-docker login -u khangtrong
-docker compose -f docker-compose.yml -f docker-compose.build.yml build
-docker compose -f docker-compose.yml -f docker-compose.build.yml push web-frontend-server application-backend-server
-```
-
-Image phải hỗ trợ kiến trúc CPU của EC2 (`amd64` hoặc `arm64`); nếu máy build và
-EC2 khác kiến trúc, cần build cho kiến trúc đích hoặc publish image đa nền tảng.
-
-Trên EC2, `sudo bash setup-ec2.sh` tự thực hiện:
+Để đối chiếu backend trực tiếp với gateway, chạy trên terminal SSH EC2; không cần mở cổng 8085 ra Internet:
 
 ```bash
-docker compose pull
-docker compose up -d --no-build --pull never --wait --wait-timeout 300
+curl --fail http://127.0.0.1:8085/hello
+curl --fail http://127.0.0.1/api/hello
 ```
 
-Nếu các repository Docker Hub là private, đăng nhập bằng `sudo docker login`
-trên EC2 trước khi chạy setup để Docker dưới quyền root có credential phù hợp.
-Nguồn: [Docker Compose pull](https://docs.docker.com/reference/cli/docker/compose/pull/),
-[Docker Compose push](https://docs.docker.com/reference/cli/docker/compose/push/).
+Hai lệnh phải trả cùng JSON lời chào.
+
+### Keycloak và Postman
+
+Realm mẫu `realm_sv001` có user `sv01`, `sv02` và public client `flask-app` với Direct access grants bật. Có thể quản lý tại các mục **Users** và **Clients** trong Keycloak.
+
+Endpoint `/api/secure` yêu cầu Bearer token. Nếu gọi `GET http://PUBLIC_IP_EC2/api/secure` với **No Auth**, API trả về 401.
+
+Để lấy token, tạo request **POST**:
+
+```text
+http://PUBLIC_IP_EC2:8081/realms/realm_sv001/protocol/openid-connect/token
+```
+
+Chọn **No Auth → Body → x-www-form-urlencoded**:
+
+| Key | Value |
+| --- | --- |
+| grant_type | password |
+| client_id | flask-app |
+| username | sv01 |
+| password | Mật khẩu hiện tại của sv01 |
+
+Mật khẩu khởi tạo của user demo `sv01` trong file realm là `Sv01-demo-change-me`; nếu đã đổi trong Keycloak thì dùng mật khẩu mới. Đây là mật khẩu user demo, khác mật khẩu quản trị.
+
+Copy `access_token` từ phản hồi. Gọi lại `/api/secure`, chọn **Authorization → Bearer Token** và dán token. Token hợp lệ sẽ nhận response 200 cùng thông tin user.
+
+Nếu đổi tên realm `realm_sv001`, cần cập nhật đồng bộ file realm import, cấu hình backend trong Compose, issuer trong `.env`, script setup và URL lấy token. Thay file import không tự đổi realm đã tồn tại trong volume Keycloak.
+
+### Grafana
+
+Vào **Dashboards → MiniCloud → System Health of SV001**, hoặc:
+
+```text
+http://PUBLIC_IP_EC2:3000/d/system-health-sv001
+```
+
+Chọn **Last 15 minutes → Refresh** để xem CPU, Memory và Network. Nếu mới khởi động thì đợi vài phút để thu thập số liệu.
+
+Vào **Connections → Data sources → Prometheus**, kiểm tra URL nội bộ:
+
+```text
+http://monitoring-prometheus-server:9090
+```
+
+Bấm **Save & test** để kiểm tra kết nối. Datasource và dashboard được provision sẵn từ thư mục `grafana/`.
+
+## 4. Vận hành và xử lý sự cố
+
+Các thao tác dưới đây dùng khi cần xem dữ liệu, cấu hình quyền truy cập hoặc kiểm tra kết nối; không cần chạy toàn bộ sau mỗi lần khởi động.
+
+### Xem dữ liệu MariaDB
+
+Chạy trong terminal SSH EC2 tại thư mục dự án:
+
+```bash
+sudo docker compose exec relational-database-server mariadb -u root -p
+```
+
+Nhập mật khẩu **MariaDB root** đã đặt khi setup. Khi xuất hiện dấu nhắc MariaDB, chạy SQL riêng như sau:
+
+```sql
+USE studentdb;
+DESCRIBE students;
+SELECT * FROM students;
+```
+
+Bảng gồm `id`, `student_id`, `fullname`, `dob`, `major`; dữ liệu khởi tạo có 3 sinh viên. API `/api/students-db` đọc từ database, còn `/api/student` trả danh sách 5 sinh viên từ file JSON.
+
+Thoát MariaDB trước khi chạy các lệnh Linux tiếp theo:
+
+```sql
+exit;
+```
+
+### Quản lý file và cấp quyền đọc công khai trong MinIO
+
+Mở MinIO Console ở cổng 9001 để tạo bucket, upload và download file. Ví dụ: bucket `profile-pics` chứa ảnh và `documents` chứa tài liệu PDF. Tên bucket và file do người dùng lựa chọn.
+
+Giao diện Object Browser hiện tại không có mục chỉnh public policy. Khi cần chia sẻ file không yêu cầu đăng nhập, dùng `mc` trong container để cấp quyền đọc/tải xuống cho bucket đã tạo.
+
+**Ví dụ bạn có bucket tên `profile-pics`**, chạy trên terminal SSH EC2:
+
+```bash
+sudo docker compose exec object-storage-server sh -eu -c '
+mc alias set demo-local http://127.0.0.1:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
+mc anonymous set download demo-local/profile-pics
+mc anonymous get demo-local/profile-pics
+'
+```
+
+**Thay `profile-pics` ở cả hai dòng cuối bằng tên bucket của bạn.** `demo-local` là tên kết nối tới MinIO. Lệnh chỉ thay đổi policy của bucket được chỉ định; các bucket khác giữ nguyên. Mọi file hiện có và upload sau này trong bucket đó được đọc/tải xuống ẩn danh; không cấp quyền upload hoặc xóa ẩn danh.
+
+Mở cửa sổ ẩn danh và truy cập đúng tên file, ví dụ:
+
+```text
+http://PUBLIC_IP_EC2:9000/profile-pics/avatar.jpg
+```
+
+Nếu file thật là `OIP.webp` thì dùng:
+
+```text
+http://PUBLIC_IP_EC2:9000/profile-pics/OIP.webp
+```
+
+MinIO hỗ trợ nhiều định dạng file. URL phải khớp chính xác tên bucket và tên object, bao gồm chữ hoa/thường và phần mở rộng. Dùng cửa sổ ẩn danh để kiểm tra file có truy cập được khi chưa đăng nhập hay không.
+
+### Kiểm tra DNS nội bộ
+
+Chạy trong terminal SSH EC2:
+
+```bash
+sudo docker compose exec internal-dns-server sh -eu -c '
+for name in web-frontend-server.cloud.local app-backend.cloud.local minio.cloud.local keycloak.cloud.local; do
+    echo "=== $name ==="
+    dig @127.0.0.1 "$name" A +short
+done
+'
+```
+
+Kết quả theo zone hiện tại:
+
+| Tên miền | IP nội bộ Docker |
+| --- | --- |
+| web-frontend-server.cloud.local | 172.28.0.11 |
+| app-backend.cloud.local | 172.28.0.12 |
+| minio.cloud.local | 172.28.0.15 |
+| keycloak.cloud.local | 172.28.0.13 |
+
+Đối chiếu IP trả về với bảng trên. Đây là kiểm tra DNS nội bộ, không cần mở cổng 1053 ra Internet.
+
+### Kiểm tra kết nối giữa các container
+
+Lệnh tạo container kiểm tra tạm trong mạng `cloud-net`, ping 11 container rồi tự xóa container kiểm tra. Lần đầu Docker có thể tải image BusyBox.
+
+```bash
+sudo docker run --rm --network cloud-net busybox:1.36 sh -c '
+failed=0
+for service in \
+web-frontend-server \
+web-frontend-server-2 \
+application-backend-server \
+relational-database-server \
+authentication-identity-server \
+object-storage-server \
+internal-dns-server \
+monitoring-prometheus-server \
+monitoring-node-exporter-server \
+monitoring-grafana-dashboard-server \
+api-gateway-proxy-server
+do
+    if ping -c 2 -W 3 "$service" >/dev/null 2>&1; then
+        printf "PASS  %s\n" "$service"
+    else
+        printf "FAIL  %s\n" "$service"
+        failed=1
+    fi
+done
+exit "$failed"
+'
+```
+
+Kết quả bình thường có 11 dòng PASS. Nếu có FAIL, kiểm tra container tương ứng và mạng `cloud-net`. Ping kiểm tra thông mạng; dùng healthcheck và request API để kiểm tra trạng thái ứng dụng.
+
+### Kiểm tra cân bằng tải
+
+Copy nguyên khối sau vào terminal SSH, gồm cả dòng `PY` cuối cùng. Python được cài bởi script setup.
+
+```bash
+python3 - <<'PY'
+import http.client
+
+conn = http.client.HTTPConnection("127.0.0.1", 80, timeout=10)
+seen = set()
+
+for number in range(1, 9):
+    conn.request("GET", "/")
+    response = conn.getresponse()
+    backend = response.getheader("X-Backend-Instance")
+    response.read()
+    print(f"Request {number}: HTTP {response.status} | Backend: {backend}")
+    if response.status == 200 and backend:
+        seen.add(backend)
+
+conn.close()
+expected = {"web-frontend-server", "web-frontend-server-2"}
+passed = expected.issubset(seen)
+print("\nLoad balancing:", "PASS - both web servers responded" if passed else "FAIL - check results")
+raise SystemExit(0 if passed else 1)
+PY
+```
+
+Kết quả bình thường có HTTP 200 từ cả `web-frontend-server` và `web-frontend-server-2`, cùng dòng `Load balancing: PASS - both web servers responded`. Nếu FAIL, kiểm tra trạng thái hai web server và cấu hình upstream trong `proxy/nginx.conf`.
+
+Lệnh gọi gateway ở `127.0.0.1:80` trên EC2. Dùng cùng kết nối để quan sát hai backend qua Nginx. DNS, ping và load balancing ở đây đều chạy trên EC2; không cần mở thêm cổng Security Group.
+
+### Xem trạng thái và log
+
+Chạy tại thư mục dự án trên EC2:
+
+```bash
+sudo docker compose ps
+sudo docker compose logs --tail=100
+```
+
+Để xem log một dịch vụ, ví dụ backend:
+
+```bash
+sudo docker compose logs --tail=100 application-backend-server
+```
+
+Khởi động lại một dịch vụ sau khi sửa cấu hình bind mount, ví dụ gateway:
+
+```bash
+sudo docker compose restart api-gateway-proxy-server
+```
+
+Nếu trình duyệt báo timeout nhưng dịch vụ vẫn healthy, kiểm tra public IP, cổng và Source trong Security Group. Các lệnh Docker ở đây dùng `sudo` để tránh lỗi quyền truy cập `/var/run/docker.sock`.

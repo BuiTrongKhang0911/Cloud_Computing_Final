@@ -199,6 +199,25 @@ if ! docker compose pull; then
 fi
 docker compose up -d --no-build --pull never --wait --wait-timeout 300
 
+# The assignment demo uses HTTP on the public IP, including the admin realm.
+# Use the container credentials without another prompt or a persistent CLI token.
+printf 'Configuring Keycloak realms for the HTTP demo...\n'
+docker compose exec -T authentication-identity-server sh -eu -c '
+    config_file="$(mktemp /tmp/minicloud-kcadm.XXXXXX)"
+    trap '\''rm -f "$config_file"'\'' EXIT
+    /opt/keycloak/bin/kcadm.sh config credentials \
+        --config "$config_file" \
+        --server http://localhost:8080 \
+        --realm master \
+        --user "$KC_BOOTSTRAP_ADMIN_USERNAME" \
+        --password "$KC_BOOTSTRAP_ADMIN_PASSWORD"
+    for realm in master minicloud realm_sv001; do
+        /opt/keycloak/bin/kcadm.sh update "realms/$realm" \
+            --config "$config_file" -s sslRequired=NONE
+        printf "HTTP enabled for realm: %s\n" "$realm"
+    done
+'
+
 # MariaDB imports init SQL on the first startup of a new data volume.
 # This checks the result; it does not reapply seed SQL or reset existing data.
 student_count="$(docker compose exec -T relational-database-server sh -c \
