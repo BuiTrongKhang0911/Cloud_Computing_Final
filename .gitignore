@@ -1,6 +1,4 @@
 .env
 __pycache__/
 *.pyc
-evidence/*.log
-evidence/*.txt
-report-assets/generated/
+*.pem

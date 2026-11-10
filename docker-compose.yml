@@ -1,9 +1,7 @@
 services:
   web-frontend-server:
     container_name: minicloud-web
-    build:
-      context: ./web-frontend-server
-    image: wasabi4816/myminicloud-web:latest
+    image: khangtrong/cloud-final-frontend:latest
     ports:
       - "8080:80"
     restart: unless-stopped
@@ -18,12 +16,10 @@ services:
 
   web-frontend-server-2:
     container_name: minicloud-web-2
-    image: wasabi4816/myminicloud-web-2:latest
-    build:
-      context: ./web-frontend-server
+    image: khangtrong/cloud-final-frontend:latest
     volumes:
-      - ./web-frontend-server/nginx-server-2.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./web-frontend-server/index-server-2.html:/usr/share/nginx/html/index.html:ro
+      - ./web/conf.server-2:/etc/nginx/conf.d/default.conf:ro
+      - ./web/html/index-server-2.html:/usr/share/nginx/html/index.html:ro
     restart: unless-stopped
     networks:
       cloud-net:
@@ -36,8 +32,7 @@ services:
 
   application-backend-server:
     container_name: minicloud-app
-    build:
-      context: ./application-backend-server
+    image: khangtrong/cloud-final-backend:latest
     ports:
       - "8085:8081"
     environment:
@@ -80,7 +75,7 @@ services:
       - "127.0.0.1:3307:3306"
     volumes:
       - mariadb-data:/var/lib/mysql
-      - ./relational-database-server/init:/docker-entrypoint-initdb.d:ro
+      - ./db/init:/docker-entrypoint-initdb.d:ro
     restart: unless-stopped
     networks:
       cloud-net:
@@ -104,7 +99,7 @@ services:
       - "8081:8080"
     volumes:
       - keycloak-data:/opt/keycloak/data
-      - ./authentication-identity-server/realm:/opt/keycloak/data/import:ro
+      - ./auth/realm:/opt/keycloak/data/import:ro
     restart: unless-stopped
     networks:
       cloud-net:
@@ -144,8 +139,10 @@ services:
       - "1053:53/tcp"
       - "1053:53/udp"
     volumes:
-      - ./internal-dns-server/named.conf:/etc/bind/named.conf:ro
-      - ./internal-dns-server/db.cloud.local:/etc/bind/db.cloud.local:ro
+      - ./dns/named.conf:/etc/bind/named.conf:ro
+      - ./dns/named.conf.options:/etc/bind/named.conf.options:ro
+      - ./dns/named.conf.local:/etc/bind/named.conf.local:ro
+      - ./dns/db.cloud.local:/etc/bind/db.cloud.local:ro
       - bind-cache:/var/cache/bind
     restart: unless-stopped
     networks:
@@ -163,7 +160,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./monitoring-prometheus-server/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitor/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     restart: unless-stopped
     networks:
@@ -204,8 +201,8 @@ services:
       - "3000:3000"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./monitoring-grafana-dashboard-server/provisioning:/etc/grafana/provisioning:ro
-      - ./monitoring-grafana-dashboard-server/dashboards:/var/lib/grafana/dashboards:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       monitoring-prometheus-server:
         condition: service_healthy
@@ -221,8 +218,9 @@ services:
 
   api-gateway-proxy-server:
     container_name: minicloud-proxy
-    build:
-      context: ./api-gateway-proxy-server
+    image: nginx:1.27-alpine
+    volumes:
+      - ./proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "80:80"
     depends_on:

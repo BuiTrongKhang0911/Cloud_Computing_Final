@@ -1,0 +1,2 @@
+# Keep shell scripts compatible with Linux when checking out on Windows.
+*.sh text eol=lf

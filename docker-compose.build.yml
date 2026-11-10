@@ -1,0 +1,10 @@
+# Local image build/publish configuration. EC2 uses docker-compose.yml only.
+# docker compose -f docker-compose.yml -f docker-compose.build.yml build
+services:
+  web-frontend-server:
+    build:
+      context: ./web
+
+  application-backend-server:
+    build:
+      context: ./app
