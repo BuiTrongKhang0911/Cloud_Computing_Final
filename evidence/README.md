@@ -18,7 +18,7 @@ Screenshots are grouped by the baseline demo area. Filenames use numeric prefixe
 
 Existing text logs and command output files remain at the root of this folder. Before adding evidence to a public report or repository, review screenshots and logs for credentials, tokens, or personal information.
 
-## Stage 3 extension evidence to add
+## Stage 3 extension evidence
 
 | Area | Suggested evidence |
 | --- | --- |
@@ -32,3 +32,4 @@ Existing text logs and command output files remain at the root of this folder. B
 | `16-grafana-system-health/` | `01-student-system-health-dashboard.png` shows the System Health of SV001 dashboard with CPU, memory, and network panels populated. |
 | `17-proxy-student-route/` | `01-student-route-through-proxy.png` shows `curl http://localhost/student/` returning the five student records through the gateway. |
 | `18-load-balancing/` | `01-round-robin-two-web-instances.png`: responses alternate between `web-frontend-server` and `web-frontend-server-2`. |
+| `19-docker-hub/` | `01-docker-hub-frontend-images.png` shows both frontend image repositories in the Docker Hub account. |
